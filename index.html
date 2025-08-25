@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>T2DM Tracker</title>
+  <meta name="description" content="Personal health tracker for adults with Type 2 Diabetes (18–65). Data stays in your browser (localStorage).">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍎</text></svg>">
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    html{scroll-behavior:smooth}
+    .navbtn[aria-current="page"]{background:#065f46;color:white}
+    .chip{border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.08);padding:.15rem .5rem;border-radius:9999px;font-size:.75rem}
+    .pill{padding:.15rem .5rem;border-radius:9999px;font-size:.75rem}
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-200">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🍎</span>
+        <span class="font-semibold text-lg">T2DM Tracker</span>
+        <span class="ml-2 chip">Local only</span>
+      </div>
+      <nav class="hidden md:flex items-center gap-2 text-sm">
+        <button class="navbtn px-3 py-2 rounded" data-tab="patient">Patient Info</button>
+        <button class="navbtn px-3 py-2 rounded" data-tab="glucose">Blood Sugar</button>
+        <button class="navbtn px-3 py-2 rounded" data-tab="meds">Medications</button>
+        <button class="navbtn px-3 py-2 rounded" data-tab="weight">Weight & Diet</button>
+        <button class="navbtn px-3 py-2 rounded" data-tab="food">Food Diary</button>
+        <button class="navbtn px-3 py-2 rounded" data-tab="messages">Messages</button>
+        <button class="navbtn px-3 py-2 rounded" data-tab="export">Export/Backup</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <div id="tabs" class="space-y-8">
+      <!-- Patient Info -->
+      <section id="tab-patient" class="tab">
+        <h2 class="text-xl font-semibold mb-4">Patient Information</h2>
+        <form id="patientForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><label class="block text-sm font-medium">Full Name</label><input name="name" class="mt-1 w-full rounded border-gray-300" required></div>
+          <div><label class="block text-sm font-medium">Age (18–65)</label><input name="age" type="number" min="18" max="65" class="mt-1 w-full rounded border-gray-300" required></div>
+          <div><label class="block text-sm font-medium">Phone</label><input name="phone" class="mt-1 w-full rounded border-gray-300"></div>
+          <div><label class="block text-sm font-medium">Email</label><input name="email" type="email" class="mt-1 w-full rounded border-gray-300"></div>
+          <div><label class="block text-sm font-medium">Diagnosis Date</label><input name="dxDate" type="date" class="mt-1 w-full rounded border-gray-300"></div>
+          <div><label class="block text-sm font-medium">Emergency Contact</label><input name="emergency" class="mt-1 w-full rounded border-gray-300"></div>
+          <div class="md:col-span-2"><label class="block text-sm font-medium">Notes</label><textarea name="notes" rows="3" class="mt-1 w-full rounded border-gray-300"></textarea></div>
+          <div class="md:col-span-2 flex gap-3">
+            <button class="px-4 py-2 rounded bg-emerald-600 text-white" type="submit">Save</button>
+            <span id="patientSaved" class="text-sm text-emerald-700"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- Blood Sugar -->
+      <section id="tab-glucose" class="tab hidden">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xl font-semibold">Blood Sugar (up to 4/day)</h2>
+          <div class="text-sm text-gray-600">Green=Normal · Yellow=Elevated · Red=Concerning</div>
+        </div>
+        <form id="glucoseForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div><label class="block text-sm font-medium">Date</label><input name="date" type="date" class="mt-1 w-full rounded border-gray-300" required></div>
+          <div><label class="block text-sm font-medium">Timing</label>
+            <select name="time" class="mt-1 w-full rounded border-gray-300" required>
+              <option value="Fasting">Fasting</option>
+              <option value="Before Lunch">Before Lunch</option>
+              <option value="Before Dinner">Before Dinner</option>
+              <option value="Bedtime">Bedtime</option>
+            </select>
+          </div>
+          <div><label class="block text-sm font-medium">mg/dL</label><input name="value" type="number" min="20" max="600" class="mt-1 w-full rounded border-gray-300" required></div>
+          <button class="px-4 py-2 rounded bg-emerald-600 text-white" type="submit">Add</button>
+        </form>
+
+        <div class="my-4">
+          <canvas id="glucoseChart" height="120"></canvas>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-2">Entries</h3>
+          <div id="glucoseList" class="space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- Meds -->
+      <section id="tab-meds" class="tab hidden">
+        <h2 class="text-xl font-semibold mb-4">Medications</h2>
+        <form id="medForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div><label class="block text-sm font-medium">Name</label><input name="name" class="mt-1 w-full rounded border-gray-300" required></div>
+          <div><label class="block text-sm font-medium">Strength</label><input name="strength" class="mt-1 w-full rounded border-gray-300"></div>
+          <div><label class="block text-sm font-medium">Frequency</label><input name="freq" class="mt-1 w-full rounded border-gray-300" placeholder="e.g., BID"></div>
+          <div><label class="block text-sm font-medium">Prescriber</label><input name="doc" class="mt-1 w-full rounded border-gray-300"></div>
+          <button class="px-4 py-2 rounded bg-emerald-600 text-white" type="submit">Add</button>
+        </form>
+        <div id="medList" class="mt-4 grid gap-3"></div>
+      </section>
+
+      <!-- Weight & Diet -->
+      <section id="tab-weight" class="tab hidden">
+        <h2 class="text-xl font-semibold mb-4">Weight & Diet</h2>
+        <form id="weightForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div><label class="block text-sm font-medium">Date</label><input name="date" type="date" class="mt-1 w-full rounded border-gray-300" required></div>
+          <div><label class="block text-sm font-medium">Weight (lb)</label><input name="weight" type="number" step="0.1" class="mt-1 w-full rounded border-gray-300" required></div>
+          <div><label class="block text-sm font-medium">Notes</label><input name="note" class="mt-1 w-full rounded border-gray-300"></div>
+          <button class="px-4 py-2 rounded bg-emerald-600 text-white" type="submit">Add</button>
+        </form>
+        <div class="my-4"><canvas id="weightChart" height="120"></canvas></div>
+        <div id="weightList" class="space-y-2"></div>
+      </section>
+
+      <!-- Food Diary -->
+      <section id="tab-food" class="tab hidden">
+        <h2 class="text-xl font-semibold mb-4">Food Diary</h2>
+        <form id="foodForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div><label class="block text-sm font-medium">Date</label><input name="date" type="date" class="mt-1 w-full rounded border-gray-300" required></div>
+          <div><label class="block text-sm font-medium">Meal</label>
+            <select name="meal" class="mt-1 w-full rounded border-gray-300">
+              <option>Breakfast</option><option>Lunch</option><option>Dinner</option>
+              <option>Mid‑morning Snack</option><option>Evening Snack</option>
+            </select></div>
+          <div><label class="block text-sm font-medium">What did you eat?</label><input name="items" class="mt-1 w-full rounded border-gray-300" required></div>
+          <button class="px-4 py-2 rounded bg-emerald-600 text-white" type="submit">Add</button>
+        </form>
+        <div id="foodList" class="mt-4 space-y-2"></div>
+      </section>
+
+      <!-- Messages -->
+      <section id="tab-messages" class="tab hidden">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xl font-semibold">Healthcare Communication</h2>
+          <div class="text-sm text-gray-600">Priority: <span class="pill bg-gray-100 border border-gray-300">normal</span> <span class="pill bg-yellow-100 border border-yellow-300">urgent</span> <span class="pill bg-red-100 border border-red-300">emergency</span></div>
+        </div>
+        <form id="msgForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div><label class="block text-sm font-medium">To</label><input name="to" class="mt-1 w-full rounded border-gray-300" placeholder="Dr. Smith / Nurse Jones" required></div>
+          <div><label class="block text-sm font-medium">Priority</label>
+            <select name="priority" class="mt-1 w-full rounded border-gray-300">
+              <option>normal</option><option>urgent</option><option>emergency</option>
+            </select></div>
+          <div class="md:col-span-2"><label class="block text-sm font-medium">Message</label><input name="body" class="mt-1 w-full rounded border-gray-300" required></div>
+          <button class="px-4 py-2 rounded bg-emerald-600 text-white" type="submit">Add</button>
+        </form>
+        <div id="msgList" class="mt-4 space-y-2"></div>
+        <p class="text-xs text-gray-500 mt-2">Note: Messages are stored locally in your browser only and are not sent to providers.</p>
+      </section>
+
+      <!-- Export / Backup -->
+      <section id="tab-export" class="tab hidden">
+        <h2 class="text-xl font-semibold mb-2">Export / Backup</h2>
+        <div class="space-x-3">
+          <button id="btnExport" class="px-4 py-2 rounded bg-emerald-600 text-white">Export JSON</button>
+          <input type="file" id="importFile" accept="application/json" class="hidden">
+          <button id="btnImport" class="px-4 py-2 rounded bg-white border">Import JSON</button>
+          <button id="btnReset" class="px-4 py-2 rounded bg-white border border-red-300 text-red-700">Reset All</button>
+        </div>
+        <p class="text-sm text-gray-500 mt-2">Your data never leaves your device unless you export it.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="max-w-6xl mx-auto px-4 pb-10 text-sm text-gray-500">
+    <hr class="my-6" />
+    <p>Blood sugar targets: <strong>Fasting 80–99 mg/dL</strong>, <strong>Post‑meal &lt;140 mg/dL</strong>. This tool is not medical advice.</p>
+    <p class="mt-2">© <span id="yr"></span> T2DM Tracker · v1.0.0</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
